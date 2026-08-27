@@ -24,6 +24,9 @@ const branchRoutes = require('./routes/branchRoutes');
 // Initialize express
 const app = express();
 
+// Trust the first proxy (Nginx)
+app.set('trust proxy', 1);
+
 // Rate limiting
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
