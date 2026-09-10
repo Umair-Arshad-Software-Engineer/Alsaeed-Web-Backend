@@ -34,35 +34,26 @@ const limiter = rateLimit({
   message: 'Too many requests from this IP, please try again later.',
 });
 
-// ─── UPDATED CORS CONFIGURATION ───
-// Allow all origins for development (Flutter web)
 app.use(cors({
   origin: [
+    'https://alsaeedsweetsbakers.pk',
+    'https://www.alsaeedsweetsbakers.pk',
     'http://localhost:3000',
     'http://localhost:5000',
     'http://127.0.0.1:3000',
     'http://127.0.0.1:5000',
     'http://localhost:5500',
     'http://127.0.0.1:5500',
-    // Allow any localhost port (Flutter web runs on random ports)
     /^http:\/\/localhost:\d+$/,
     /^http:\/\/127\.0\.0\.1:\d+$/,
-    // Allow Chrome extensions
-    'chrome-extension://*',
   ],
   credentials: true,
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
   allowedHeaders: [
-    'Content-Type',
-    'Authorization',
-    'X-Requested-With',
-    'Accept',
-    'Origin',
-    'Access-Control-Allow-Origin',
-    'Access-Control-Allow-Credentials',
+    'Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin',
   ],
   exposedHeaders: ['Content-Length', 'X-Requested-With'],
-  maxAge: 86400, // 24 hours
+  maxAge: 86400,
 }));
 
 // For development, you can also use a simpler configuration:
