@@ -1,3 +1,4 @@
+// models/OrderItem.js
 const { DataTypes } = require('sequelize');
 const sequelize = require('../config/database');
 
@@ -41,6 +42,11 @@ const OrderItem = sequelize.define('OrderItem', {
     allowNull: false,
   },
   variantLabel: {
+    type: DataTypes.STRING(100),
+    allowNull: true,
+  },
+  // ── NEW ──
+  flavour: {
     type: DataTypes.STRING(100),
     allowNull: true,
   },
