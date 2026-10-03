@@ -5,29 +5,37 @@ const { validationResult } = require('express-validator');
 
 // ─────────────────────────────────────────────
 //  HELPER: Safely normalize `variants`.
-//  Flutter sends this as a real JSON array inside
-//  a JSON body, so it usually arrives as an Array
-//  already. This helper also tolerates a JSON
-//  string, just in case, without ever throwing.
+//  Accepts: JSON array, JSON string, or null/undefined.
+//  Produces a fixed shape that downstream code can rely on.
 // ─────────────────────────────────────────────
 const parseVariants = (raw) => {
   if (raw === undefined || raw === null) return [];
-  if (Array.isArray(raw)) return raw;
 
-  if (typeof raw === 'string') {
+  let arr = [];
+  if (Array.isArray(raw)) arr = raw;
+  else if (typeof raw === 'string') {
     const trimmed = raw.trim();
     if (trimmed === '' || trimmed === 'undefined' || trimmed === 'null') return [];
     try {
       const parsed = JSON.parse(trimmed);
-      return Array.isArray(parsed) ? parsed : [];
+      arr = Array.isArray(parsed) ? parsed : [];
     } catch (err) {
-      console.error('Failed to parse variants JSON, raw value was:', trimmed);
+      console.error('Failed to parse variants JSON:', trimmed);
       return [];
     }
+  } else {
+    return [];
   }
 
-  // Any other unexpected type (object, number, etc.) — ignore safely
-  return [];
+  // Normalize every variant so downstream code can rely on a fixed shape
+  return arr.map((v) => ({
+    label: String(v?.label || '').trim(),
+    flavour: String(v?.flavour || '').trim(),
+    price: parseFloat(v?.price) || 0,
+    saleRate: parseFloat(v?.saleRate) || 0,
+    discountApply: v?.discountApply === true || v?.discountApply === 'true',
+    discountRate: parseFloat(v?.discountRate) || 0,
+  }));
 };
 
 // @desc    Get all products
@@ -127,9 +135,6 @@ const getProduct = async (req, res) => {
 // @desc    Create product
 // @route   POST /api/products
 // @access  Private (Admin only)
-// NOTE: Expects a plain JSON body (application/json), matching
-// ApiService.createProduct() on the Flutter side. Image is passed
-// as `imageUrl` (string) and/or `imageBase64` (string) — not a file upload.
 const createProduct = async (req, res) => {
   try {
     const errors = validationResult(req);
@@ -179,7 +184,6 @@ const createProduct = async (req, res) => {
 
     await categoryRecord.increment('productCount');
 
-    // Fetch the complete product with category
     const completeProduct = await Product.findByPk(product.id, {
       include: [
         {
@@ -255,20 +259,38 @@ const updateProduct = async (req, res) => {
       product.categoryId = newCategory.id;
     }
 
-    // Update product
+    // Update product — note: `variants` is only replaced when provided,
+    // so partial updates (e.g. toggling isActive) preserve flavours.
     await product.update({
       name: name !== undefined ? name : product.name,
-      description: description !== undefined ? description : product.description,
+      description:
+        description !== undefined ? description : product.description,
       price: price !== undefined ? parseFloat(price) : product.price,
-      saleRate: saleRate !== undefined ? parseFloat(saleRate) : product.saleRate,
-      discountApply: discountApply !== undefined ? (discountApply === true || discountApply === 'true') : product.discountApply,
-      discountRate: discountRate !== undefined ? parseFloat(discountRate) : product.discountRate,
+      saleRate:
+        saleRate !== undefined ? parseFloat(saleRate) : product.saleRate,
+      discountApply:
+        discountApply !== undefined
+          ? discountApply === true || discountApply === 'true'
+          : product.discountApply,
+      discountRate:
+        discountRate !== undefined
+          ? parseFloat(discountRate)
+          : product.discountRate,
       imageUrl: imageUrl !== undefined ? imageUrl : product.imageUrl,
-      imageFileName: imageFileName !== undefined ? imageFileName : product.imageFileName,
-      imageBase64: imageBase64 !== undefined ? imageBase64 : product.imageBase64,
-      hasVariants: hasVariants !== undefined ? (hasVariants === true || hasVariants === 'true') : product.hasVariants,
-      variants: variants !== undefined ? parseVariants(variants) : product.variants,
-      isActive: isActive !== undefined ? (isActive === true || isActive === 'true') : product.isActive,
+      imageFileName:
+        imageFileName !== undefined ? imageFileName : product.imageFileName,
+      imageBase64:
+        imageBase64 !== undefined ? imageBase64 : product.imageBase64,
+      hasVariants:
+        hasVariants !== undefined
+          ? hasVariants === true || hasVariants === 'true'
+          : product.hasVariants,
+      variants:
+        variants !== undefined ? parseVariants(variants) : product.variants,
+      isActive:
+        isActive !== undefined
+          ? isActive === true || isActive === 'true'
+          : product.isActive,
     });
 
     const updatedProduct = await Product.findByPk(product.id, {
