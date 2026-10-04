@@ -24,6 +24,11 @@ const Category = sequelize.define('Category', {
     type: DataTypes.STRING(255),
     allowNull: true,
   },
+  imageMime: {
+    type: DataTypes.STRING(50),
+    allowNull: true,
+    defaultValue: 'image/jpeg',
+  },
   isActive: {
     type: DataTypes.BOOLEAN,
     defaultValue: true,

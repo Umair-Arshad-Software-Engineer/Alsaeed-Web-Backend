@@ -1,5 +1,4 @@
 const { Category, Product } = require('../models');
-const { Op } = require('sequelize');
 const { validationResult } = require('express-validator');
 
 // @desc    Get all categories
@@ -28,8 +27,7 @@ const getCategories = async (req, res) => {
       order: [['name', 'ASC']],
     });
 
-    // Calculate product count for each category
-    const categoriesWithCount = categories.map(cat => {
+    const categoriesWithCount = categories.map((cat) => {
       const plain = cat.toJSON();
       plain.productCount = cat.products ? cat.products.length : 0;
       return plain;
@@ -60,6 +58,7 @@ const getCategory = async (req, res) => {
           as: 'products',
           attributes: ['id', 'name', 'price', 'imageUrl', 'imageBase64'],
           where: { isActive: true },
+          required: false,
         },
       ],
     });
@@ -84,6 +83,34 @@ const getCategory = async (req, res) => {
   }
 };
 
+// Helper — extract image from either multipart file OR base64 in JSON body
+function extractImage(req, fallbackBase64 = '', fallbackFileName = '', fallbackMime = 'image/jpeg') {
+  // 1. File upload via multer (multipart/form-data)
+  if (req.file) {
+    return {
+      imageBase64: req.file.buffer.toString('base64'),
+      imageFileName: req.file.originalname,
+      imageMime: req.file.mimetype,
+    };
+  }
+
+  // 2. Base64 string in JSON body
+  if (req.body.imageBase64 !== undefined && req.body.imageBase64 !== null) {
+    return {
+      imageBase64: req.body.imageBase64 || '',
+      imageFileName: req.body.imageFileName || '',
+      imageMime: req.body.imageMime || 'image/jpeg',
+    };
+  }
+
+  // 3. Nothing provided — keep existing values
+  return {
+    imageBase64: fallbackBase64,
+    imageFileName: fallbackFileName,
+    imageMime: fallbackMime,
+  };
+}
+
 // @desc    Create category
 // @route   POST /api/categories
 // @access  Private (Admin only)
@@ -95,15 +122,8 @@ const createCategory = async (req, res) => {
     }
 
     const { name, description, isActive } = req.body;
-    
-    // Handle image upload - file is available in req.file
-    let imageBase64 = '';
-    let imageFileName = '';
-    
-    if (req.file) {
-      imageBase64 = req.file.buffer.toString('base64');
-      imageFileName = req.file.originalname;
-    }
+
+    const { imageBase64, imageFileName, imageMime } = extractImage(req);
 
     // Check if category exists
     const existing = await Category.findOne({ where: { name } });
@@ -119,6 +139,7 @@ const createCategory = async (req, res) => {
       description: description || '',
       imageBase64: imageBase64 || '',
       imageFileName: imageFileName || '',
+      imageMime: imageMime || 'image/jpeg',
       isActive: isActive !== undefined ? isActive : true,
       productCount: 0,
     });
@@ -155,21 +176,21 @@ const updateCategory = async (req, res) => {
     }
 
     const { name, description, isActive } = req.body;
-    
-    // Handle image upload - file is available in req.file
-    let imageBase64 = category.imageBase64;
-    let imageFileName = category.imageFileName;
-    
-    if (req.file) {
-      imageBase64 = req.file.buffer.toString('base64');
-      imageFileName = req.file.originalname;
-    }
+
+    const { imageBase64, imageFileName, imageMime } = extractImage(
+      req,
+      category.imageBase64,
+      category.imageFileName,
+      category.imageMime
+    );
 
     await category.update({
       name: name || category.name,
-      description: description !== undefined ? description : category.description,
-      imageBase64: imageBase64,
-      imageFileName: imageFileName,
+      description:
+        description !== undefined ? description : category.description,
+      imageBase64,
+      imageFileName,
+      imageMime,
       isActive: isActive !== undefined ? isActive : category.isActive,
     });
 
@@ -199,8 +220,9 @@ const deleteCategory = async (req, res) => {
       });
     }
 
-    // Check if category has products
-    const productCount = await Product.count({ where: { categoryId: category.id } });
+    const productCount = await Product.count({
+      where: { categoryId: category.id },
+    });
     if (productCount > 0) {
       return res.status(400).json({
         success: false,
