@@ -26,6 +26,13 @@ async function optimizeImage(b64) {
   }
 }
 
+const logErr = (label, error) =>
+  console.error(
+    label,
+    error.message,
+    error.parent?.sqlMessage || error.parent?.message || ''
+  );
+
 // @desc    Get all categories
 // @route   GET /api/categories   (?lite=1 = fast public list, no images)
 // @access  Public
@@ -50,7 +57,8 @@ const getCategories = async (req, res) => {
           'name',
           'isActive',
           'updatedAt',
-          [sequelize.literal('LENGTH(`Category`.`imageBase64`) > 0'), 'hasImage'],
+          // portable: works on MySQL / Postgres / SQLite, no hard-coded quoting
+          [sequelize.fn('LENGTH', sequelize.col('imageBase64')), 'imageLen'],
         ],
         order: [['name', 'ASC']],
         raw: true,
@@ -62,8 +70,8 @@ const getCategories = async (req, res) => {
           id: c.id,
           name: c.name,
           isActive: !!c.isActive,
-          hasImage: !!Number(c.hasImage),
-          v: new Date(c.updatedAt).getTime(), // cache-buster for the image URL
+          hasImage: Number(c.imageLen) > 0,
+          v: c.updatedAt ? new Date(c.updatedAt).getTime() : 0, // cache-buster
         })),
       };
       if (cacheable) liteCache = { at: Date.now(), body };
@@ -94,7 +102,7 @@ const getCategories = async (req, res) => {
 
     res.json({ success: true, categories: categoriesWithCount });
   } catch (error) {
-    console.error('Get categories error:', error);
+    logErr('Get categories error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
@@ -117,7 +125,7 @@ const getCategoryImage = async (req, res) => {
     });
     res.send(Buffer.from(raw, 'base64'));
   } catch (error) {
-    console.error('Get category image error:', error);
+    logErr('Get category image error:', error);
     res.status(500).end();
   }
 };
@@ -145,7 +153,7 @@ const getCategory = async (req, res) => {
 
     res.json({ success: true, category });
   } catch (error) {
-    console.error('Get category error:', error);
+    logErr('Get category error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
@@ -212,7 +220,7 @@ const createCategory = async (req, res) => {
     clearLiteCache();
     res.status(201).json({ success: true, category });
   } catch (error) {
-    console.error('Create category error:', error);
+    logErr('Create category error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
@@ -259,7 +267,7 @@ const updateCategory = async (req, res) => {
     clearLiteCache();
     res.json({ success: true, category });
   } catch (error) {
-    console.error('Update category error:', error);
+    logErr('Update category error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
@@ -286,7 +294,7 @@ const deleteCategory = async (req, res) => {
     clearLiteCache();
     res.json({ success: true, message: 'Category deleted successfully' });
   } catch (error) {
-    console.error('Delete category error:', error);
+    logErr('Delete category error:', error);
     res.status(500).json({ success: false, message: 'Server error' });
   }
 };
