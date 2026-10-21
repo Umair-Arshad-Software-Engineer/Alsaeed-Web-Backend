@@ -1,6 +1,7 @@
 // controllers/orderController.js
 const { Order, OrderItem, Product, Customer, User } = require('../models');
 const { generateOrderId, formatTimestamp } = require('../utils/helpers');
+const { sendOrderNotification } = require('../utils/orderMailer');
 const { Op } = require('sequelize');
 const { validationResult } = require('express-validator');
 
@@ -169,6 +170,11 @@ const createOrder = async (req, res) => {
     const fullOrder = await Order.findByPk(order.id, {
       include: [{ model: OrderItem, as: 'items' }],
     });
+
+    // Email the shop owner about the new order.
+    // Not awaited on purpose: a slow or failed email must never delay or
+    // break the customer's order. sendOrderNotification never throws.
+    sendOrderNotification(fullOrder.toJSON());
 
     res.status(201).json({
       success: true,
