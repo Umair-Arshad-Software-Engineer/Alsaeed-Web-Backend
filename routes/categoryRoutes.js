@@ -5,6 +5,7 @@ const multer = require('multer');
 const {
   getCategories,
   getCategory,
+  getCategoryImage,
   createCategory,
   updateCategory,
   deleteCategory,
@@ -58,6 +59,7 @@ const categoryValidation = [
 
 // Public routes
 router.get('/', getCategories);
+router.get('/:id/image', getCategoryImage);   // must be before '/:id'
 router.get('/:id', getCategory);
 
 // Admin only routes

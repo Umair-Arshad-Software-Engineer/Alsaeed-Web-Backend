@@ -1,15 +1,15 @@
 // server.js
+const dotenv = require('dotenv');
+dotenv.config(); // must run before anything that reads process.env
+
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
-const seedAdmin = require('./seeders/adminSeeder');
+const compression = require('compression');
 const rateLimit = require('express-rate-limit');
-const dotenv = require('dotenv');
+const seedAdmin = require('./seeders/adminSeeder');
 const { sequelize } = require('./models');
 const errorHandler = require('./middleware/errorHandler');
-
-// Load environment variables
-dotenv.config();
 
 // Import routes
 const authRoutes = require('./routes/authRoutes');
@@ -28,46 +28,55 @@ const app = express();
 app.set('trust proxy', 1);
 
 // Rate limiting
+// Category images are separate requests now, so they must not eat the quota.
+// (Inside app.use('/api', ...), req.path is relative to /api.)
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 100,
+  max: 300,
+  standardHeaders: true,
+  legacyHeaders: false,
   message: 'Too many requests from this IP, please try again later.',
+  skip: (req) =>
+    req.method === 'OPTIONS' ||
+    /^\/categories\/[^/]+\/image\/?$/.test(req.path),
 });
 
-app.use(cors({
-  origin: [
-    'https://alsaeedsweetsbakers.pk',
-    'https://www.alsaeedsweetsbakers.pk',
-    'http://localhost:3000',
-    'http://localhost:5000',
-    'http://127.0.0.1:3000',
-    'http://127.0.0.1:5000',
-    'http://localhost:5500',
-    'http://127.0.0.1:5500',
-    /^http:\/\/localhost:\d+$/,
-    /^http:\/\/127\.0\.0\.1:\d+$/,
-  ],
-  credentials: true,
-  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-  allowedHeaders: [
-    'Content-Type', 'Authorization', 'X-Requested-With', 'Accept', 'Origin',
-  ],
-  exposedHeaders: ['Content-Length', 'X-Requested-With'],
-  maxAge: 86400,
-}));
-
-// For development, you can also use a simpler configuration:
-// app.use(cors({
-//   origin: '*',
-//   methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
-//   allowedHeaders: ['Content-Type', 'Authorization'],
-// }));
+app.use(
+  cors({
+    origin: [
+      'https://alsaeedsweetsbakers.pk',
+      'https://www.alsaeedsweetsbakers.pk',
+      'http://localhost:3000',
+      'http://localhost:5000',
+      'http://127.0.0.1:3000',
+      'http://127.0.0.1:5000',
+      'http://localhost:5500',
+      'http://127.0.0.1:5500',
+      /^http:\/\/localhost:\d+$/,
+      /^http:\/\/127\.0\.0\.1:\d+$/,
+    ],
+    credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'X-Requested-With',
+      'Accept',
+      'Origin',
+    ],
+    exposedHeaders: ['Content-Length', 'X-Requested-With'],
+    maxAge: 86400,
+  })
+);
 
 // Middleware
-app.use(helmet({
-  crossOriginResourcePolicy: { policy: "cross-origin" },
-  crossOriginOpenerPolicy: { policy: "unsafe-none" },
-}));
+app.use(
+  helmet({
+    crossOriginResourcePolicy: { policy: 'cross-origin' },
+    crossOriginOpenerPolicy: { policy: 'unsafe-none' },
+  })
+);
+app.use(compression()); // gzip JSON/text responses (images are already compressed)
 app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 app.use('/api', limiter);
@@ -102,17 +111,19 @@ const startServer = async () => {
     await sequelize.authenticate();
     console.log('✅ Database connection established successfully.');
 
-    if (process.env.NODE_ENV === 'production') {
+    // Runs by default in production (keeps new columns like `flavour` in sync).
+    // Set DB_SYNC=false in .env to skip it for faster, safer restarts.
+    if (process.env.NODE_ENV === 'production' && process.env.DB_SYNC !== 'false') {
       await sequelize.sync({ alter: true });
       console.log('✅ Database synchronized');
     }
-    
+
     await seedAdmin();
-///daskjdlaksjdkasjldjalksd
+
     app.listen(PORT, () => {
       console.log(`🚀 Server running on port ${PORT}`);
       console.log(`📍 Environment: ${process.env.NODE_ENV}`);
-      console.log(`📍 CORS enabled for development origins`);
+      console.log(`📍 CORS enabled for configured origins`);
     });
   } catch (error) {
     console.error('❌ Failed to start server:', error.message);
