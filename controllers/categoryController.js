@@ -9,6 +9,17 @@ const clearLiteCache = () => {
   liteCache = { at: 0, body: null };
 };
 
+// Real DB column name for imageBase64 (handles underscored / custom `field` mapping).
+// Raw col()/literal() bypass Sequelize's attribute -> column mapping, so we resolve it here.
+const IMAGE_COL = Category.rawAttributes.imageBase64?.field || 'imageBase64';
+
+const logErr = (label, error) =>
+  console.error(
+    label,
+    error.message,
+    error.parent?.sqlMessage || error.parent?.message || ''
+  );
+
 // ── shrink uploaded images to ~320px WebP (they display at 92-130px) ──
 async function optimizeImage(b64) {
   if (!b64) return null;
@@ -25,13 +36,6 @@ async function optimizeImage(b64) {
     return null;
   }
 }
-
-const logErr = (label, error) =>
-  console.error(
-    label,
-    error.message,
-    error.parent?.sqlMessage || error.parent?.message || ''
-  );
 
 // @desc    Get all categories
 // @route   GET /api/categories   (?lite=1 = fast public list, no images)
@@ -57,8 +61,8 @@ const getCategories = async (req, res) => {
           'name',
           'isActive',
           'updatedAt',
-          // portable: works on MySQL / Postgres / SQLite, no hard-coded quoting
-          [sequelize.fn('LENGTH', sequelize.col('imageBase64')), 'imageLen'],
+          // uses the REAL column name (e.g. image_base64), not the JS attribute name
+          [sequelize.fn('LENGTH', sequelize.col(`Category.${IMAGE_COL}`)), 'imageLen'],
         ],
         order: [['name', 'ASC']],
         raw: true,
@@ -71,7 +75,7 @@ const getCategories = async (req, res) => {
           name: c.name,
           isActive: !!c.isActive,
           hasImage: Number(c.imageLen) > 0,
-          v: c.updatedAt ? new Date(c.updatedAt).getTime() : 0, // cache-buster
+          v: c.updatedAt ? new Date(c.updatedAt).getTime() : 0, // cache-buster for the image URL
         })),
       };
       if (cacheable) liteCache = { at: Date.now(), body };
