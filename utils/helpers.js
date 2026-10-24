@@ -1,4 +1,28 @@
-const { v4: uuidv4 } = require('uuid');
+// utils/helpers.js
+const SHOP_TIME_ZONE = 'Asia/Karachi';
+
+// Formats any timestamp as Pakistan date/time, regardless of the
+// server's own timezone (hosted servers usually run in UTC).
+const shopDateParts = (timestamp) => {
+  const parts = new Intl.DateTimeFormat('en-GB', {
+    timeZone: SHOP_TIME_ZONE,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    hourCycle: 'h23',
+  }).formatToParts(new Date(timestamp));
+
+  const get = (type) => parts.find((p) => p.type === type)?.value || '';
+  return {
+    year: get('year'),
+    month: get('month'),
+    day: get('day'),
+    hour: get('hour'),
+    minute: get('minute'),
+  };
+};
 
 const generateOrderId = () => {
   const timestamp = Date.now();
@@ -7,15 +31,16 @@ const generateOrderId = () => {
 };
 
 const formatTimestamp = (timestamp) => {
-  const date = new Date(timestamp);
+  const { year, month, day, hour, minute } = shopDateParts(timestamp);
   return {
-    date: `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`,
-    time: `${String(date.getHours()).padStart(2, '0')}:${String(date.getMinutes()).padStart(2, '0')}`,
-    iso: date.toISOString(),
+    date: `${year}-${month}-${day}`, // e.g. 2026-10-24 (Pakistan date)
+    time: `${hour}:${minute}`,       // e.g. 15:07     (Pakistan time, 24h)
+    iso: new Date(timestamp).toISOString(), // ISO stays in UTC, as standard
   };
 };
 
 module.exports = {
   generateOrderId,
   formatTimestamp,
+  SHOP_TIME_ZONE,
 };
